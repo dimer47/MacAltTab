@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.button?.image = NSImage(systemSymbolName: "rectangle.on.rectangle", accessibilityDescription: "MacAltTab")
         let menu = NSMenu()
         menu.delegate = self
+        Updater.shared.start()
         statusItem.menu = menu
 
         startWhenTrusted(prompt: true)
@@ -114,6 +115,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)
         menu.addItem(.separator())
+        menu.addItem(item("Rechercher les mises à jour…", #selector(checkUpdates)))
+        let au = item("Mises à jour automatiques", #selector(toggleAutoUpdate))
+        au.state = Updater.auto ? .on : .off
+        menu.addItem(au)
+        let ver = item("Version \(Updater.installed)", nil)
+        ver.isEnabled = false
+        menu.addItem(ver)
+        menu.addItem(.separator())
         menu.addItem(item("Quitter", #selector(quit), key: "q"))
     }
 
@@ -133,6 +142,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func setSize(_ i: NSMenuItem) {
         if let raw = i.representedObject as? String, let sz = TileSize(rawValue: raw) { TileSize.current = sz }
+    }
+
+    @objc private func checkUpdates() { Updater.shared.check(silent: false) }
+
+    @objc private func toggleAutoUpdate() {
+        Updater.auto.toggle()
+        Updater.shared.start()
     }
 
     @objc private func quit() { NSApp.terminate(nil) }
