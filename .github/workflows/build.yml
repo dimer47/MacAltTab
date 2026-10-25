@@ -1,0 +1,18 @@
+name: Compilation
+
+# À chaque poussée et pull request : compile en Release.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  compiler:
+    name: Compiler
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compiler
+        run: swift build -c release

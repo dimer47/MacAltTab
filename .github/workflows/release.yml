@@ -1,0 +1,98 @@
+name: Publication
+
+# Sur un tag « v… » : compile, signe avec le certificat Developer ID, fait
+# notariser par Apple, fabrique le disque d'installation et publie la release.
+#
+# Secrets nécessaires (mêmes noms que les autres apps Mac du compte) :
+#   MAC_CERT_P12                 certificat Developer ID exporté (.p12), en base64
+#   MAC_CERT_PASSWORD            mot de passe de ce .p12
+#   APPLE_ID                     adresse du compte développeur Apple
+#   APPLE_APP_SPECIFIC_PASSWORD  mot de passe d'application Apple
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier, par exemple v1.1.0"
+        required: true
+
+env:
+  EQUIPE_APPLE: 5D6QHL72QC
+
+jobs:
+  publier:
+    name: Compiler, notariser et publier
+    runs-on: macos-26
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Importer le certificat de signature
+        env:
+          MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          TROUSSEAU="$RUNNER_TEMP/signature.keychain-db"
+          MDP="$(uuidgen)"
+          CERT="$RUNNER_TEMP/certificat.p12"
+          [ -n "$MAC_CERT_P12" ] || { echo "::error::Secret MAC_CERT_P12 vide"; exit 1; }
+          [ -n "$MAC_CERT_PASSWORD" ] || { echo "::error::Secret MAC_CERT_PASSWORD vide"; exit 1; }
+          echo "$MAC_CERT_P12" | tr -d '\n\r ' | base64 --decode > "$CERT"
+          security create-keychain -p "$MDP" "$TROUSSEAU"
+          security set-keychain-settings -lut 21600 "$TROUSSEAU"
+          security unlock-keychain -p "$MDP" "$TROUSSEAU"
+          security import "$CERT" -k "$TROUSSEAU" -P "$MAC_CERT_PASSWORD" -f pkcs12 -A \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MDP" "$TROUSSEAU" >/dev/null
+          security list-keychain -d user -s "$TROUSSEAU" login.keychain-db
+          EMPREINTE="$(security find-identity -v -p codesigning "$TROUSSEAU" | grep 'Developer ID Application' | head -1 | awk '{print $2}')"
+          [ -n "$EMPREINTE" ] || { echo "::error::Aucun certificat Developer ID"; exit 1; }
+          echo "SIGN_IDENTITY=$EMPREINTE" >> "$GITHUB_ENV"
+
+      - name: Enregistrer les identifiants de notarisation
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          xcrun notarytool store-credentials notary \
+            --apple-id "$APPLE_ID" --team-id "$EQUIPE_APPLE" --password "$APPLE_APP_SPECIFIC_PASSWORD"
+
+      - name: Inscrire la version
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          echo "VERSION_TAG=$VERSION" >> "$GITHUB_ENV"
+          echo "VERSION_APP=${VERSION#v}" >> "$GITHUB_ENV"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION#v}" Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" Resources/Info.plist
+
+      - name: Compiler, signer et notariser l'app
+        run: ./build.sh --notarize --no-install
+
+      - name: Fabriquer et notariser le disque d'installation
+        run: |
+          MONTAGE="$(mktemp -d)"
+          cp -R build/MacAltTab.app "$MONTAGE/"
+          ln -s /Applications "$MONTAGE/Applications"
+          hdiutil create -volname MacAltTab -srcfolder "$MONTAGE" -ov -format UDZO build/MacAltTab.dmg
+          codesign --sign "$SIGN_IDENTITY" --timestamp build/MacAltTab.dmg
+          xcrun notarytool submit build/MacAltTab.dmg --keychain-profile notary --wait --timeout 30m
+          xcrun stapler staple build/MacAltTab.dmg
+          spctl -a -vvv -t open --context context:primary-signature build/MacAltTab.dmg
+
+      - name: Publier la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$VERSION_TAG" "build/MacAltTab.dmg#MacAltTab $VERSION_APP (macOS)" \
+            --title "MacAltTab $VERSION_APP" --generate-notes \
+          || gh release upload "$VERSION_TAG" "build/MacAltTab.dmg#MacAltTab $VERSION_APP (macOS)" --clobber
+
+      - name: Nettoyer le trousseau
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signature.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/certificat.p12"
