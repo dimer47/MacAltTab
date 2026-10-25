@@ -58,6 +58,35 @@ enum Tabs {
         q.async { _ = run(script) }
     }
 
+    /// Ferme un onglet. Terminal n'a pas de commande pour ça : on affiche l'onglet,
+    /// puis on appuie sur le bouton de fermeture de sa fenêtre (chaque onglet en est une).
+    static func close(_ tab: BrowserTab, in w: TabWindow, app: NSRunningApplication, done: @escaping () -> Void) {
+        guard let id = app.bundleIdentifier else { return }
+        let pid = app.processIdentifier
+        q.async {
+            if id == "com.apple.Terminal" {
+                _ = run("tell application id \"\(id)\" to set selected of tab \(tab.index) of (first window whose id is \(w.scriptID)) to true")
+                usleep(150_000)
+                let el = AXUIElementCreateApplication(pid)
+                let wins: [AXUIElement] = el.attr(kAXWindowsAttribute) ?? []
+                for win in wins {
+                    var pos = CGPoint.zero, size = CGSize.zero
+                    if let v: AXValue = win.attr(kAXPositionAttribute) { AXValueGetValue(v, .cgPoint, &pos) }
+                    if let v: AXValue = win.attr(kAXSizeAttribute) { AXValueGetValue(v, .cgSize, &size) }
+                    guard abs(pos.x - w.frame.minX) < 4, abs(pos.y - w.frame.minY) < 4,
+                          let b: AXUIElement = win.attr(kAXCloseButtonAttribute) else { continue }
+                    AXUIElementPerformAction(b, kAXPressAction as CFString)
+                    break
+                }
+            } else {
+                _ = run("tell application id \"\(id)\" to close tab \(tab.index) of (first window whose id is \(w.scriptID))")
+            }
+            usleep(250_000)
+            if let r = read(id) { DispatchQueue.main.async { cache[id] = r; done() } }
+            else { DispatchQueue.main.async(execute: done) }
+        }
+    }
+
     // MARK: - Lecture
 
     private static let sep = "\u{1F}"

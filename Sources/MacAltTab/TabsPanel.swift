@@ -7,6 +7,7 @@ final class TabsPanel {
     static let width: CGFloat = 320, rowH: CGFloat = 34, pad: CGFloat = 8, margin: CGFloat = 40
     var onPick: (Int) -> Void = { _ in }
     var onEnter: () -> Void = {}
+    var onClose: (Int) -> Void = { _ in }
 
     private let panel: NSPanel
     private let glass = NSGlassEffectView()
@@ -69,6 +70,7 @@ final class TabsPanel {
 
     fileprivate func pick(_ i: Int) { onPick(i) }
     fileprivate func entered() { onEnter() }
+    fileprivate func closeTab(_ i: Int) { onClose(i) }
 }
 
 private final class TabRow: NSView {
@@ -77,6 +79,7 @@ private final class TabRow: NSView {
     private let icon = NSImageView()
     private let title = NSTextField(labelWithString: "")
     private let detail = NSTextField(labelWithString: "")
+    private let closeButton = NSButton()
     private var tracking: NSTrackingArea?
     private var active = false
     private var hovered = false { didSet { paint() } }
@@ -94,7 +97,15 @@ private final class TabRow: NSView {
         detail.textColor = .secondaryLabelColor
         detail.lineBreakMode = .byTruncatingHead
         detail.alignment = .right
-        [icon, title, detail].forEach(addSubview)
+        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Fermer l'onglet")
+        closeButton.isBordered = false
+        closeButton.symbolConfiguration = .init(pointSize: 10, weight: .bold)
+        closeButton.contentTintColor = .secondaryLabelColor
+        closeButton.toolTip = "Fermer l'onglet"
+        closeButton.target = self
+        closeButton.action = #selector(closeTapped)
+        closeButton.isHidden = true
+        [icon, title, detail, closeButton].forEach(addSubview)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -109,6 +120,7 @@ private final class TabRow: NSView {
         let w = bounds.width
         icon.frame = NSRect(x: 8, y: 9, width: 16, height: 16)
         detail.frame = NSRect(x: w - 108, y: 9, width: 100, height: 16)
+        closeButton.frame = NSRect(x: w - 28, y: 7, width: 20, height: 20)
         title.frame = NSRect(x: 32, y: 8, width: w - 32 - 114, height: 18)
         title.stringValue = t.title
         title.font = .systemFont(ofSize: 13, weight: t.active ? .semibold : .regular)
@@ -121,6 +133,9 @@ private final class TabRow: NSView {
         let c: NSColor = hovered || keyed ? NSColor.controlAccentColor.withAlphaComponent(0.3)
             : active ? NSColor.labelColor.withAlphaComponent(0.08) : .clear
         layer?.backgroundColor = c.cgColor
+        // Au survol, la croix remplace le domaine.
+        closeButton.isHidden = !hovered
+        detail.isHidden = hovered
     }
 
     override func updateTrackingAreas() {
@@ -135,9 +150,12 @@ private final class TabRow: NSView {
         owner?.entered()
     }
     override func mouseExited(with event: NSEvent) { hovered = false }
+    @objc private func closeTapped() { owner?.closeTab(tabIndex) }
+
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {
         hovered = false
-        if bounds.contains(convert(event.locationInWindow, from: nil)) { owner?.pick(tabIndex) }
+        let p = convert(event.locationInWindow, from: nil)
+        if bounds.contains(p) && !closeButton.frame.contains(p) { owner?.pick(tabIndex) }
     }
 }

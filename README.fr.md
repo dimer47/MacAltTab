@@ -23,7 +23,8 @@ MacAltTab affiche l'icône de l'app et le titre de la fenêtre. L'Accessibilité
 - **Ordre** : utilisation récente, ou alphabétique pour que les tuiles ne bougent jamais.
 - **Tailles** : S, M ou L.
 - **Recherche** : tape pendant que la grille est ouverte pour filtrer.
-- **Onglets Chrome, Safari et Terminal** : liste à côté de la grille. Clic, ou `⇧ ↓ ⇧ ↑` puis `↩`.
+- **Onglets Chrome, Safari et Terminal** : liste à côté de la grille. Clic, ou `⇧ ↓ ⇧ ↑` puis `↩`. Fermer un onglet : `×` au survol ou `⇧ ⌫`.
+- **Onglets natifs regroupés** : une fenêtre Terminal ou Finder à onglets = une seule tuile.
 - **Actions au survol** : fermer, réduire, plein écran, quitter, sous l'icône.
 - **Pastilles du Dock** : messages non lus sur les tuiles.
 - **Au relâchement de `⌥`** : valider tout de suite, ou garder la grille ouverte jusqu'au clic ou `↩` (par défaut, pour éviter les bascules involontaires).

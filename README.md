@@ -23,7 +23,8 @@ MacAltTab shows app icons and window titles instead of previews. Accessibility i
 - **Order**: most recently used, or alphabetical so tiles never move.
 - **Sizes**: S, M or L.
 - **Search**: type while the grid is open to filter by app or window title.
-- **Browser and Terminal tabs**: Chrome, Safari and Terminal windows with several tabs show them in a side list. Click a tab, or use `⇧ ↓ ⇧ ↑` then `↩`.
+- **Browser and Terminal tabs**: Chrome, Safari and Terminal windows with several tabs show them in a side list. Click a tab, or use `⇧ ↓ ⇧ ↑` then `↩`. Close a tab with the `×` on hover or `⇧ ⌫`.
+- **Native tabs merged**: Terminal or Finder windows with tabs show as one tile, not one per tab.
 - **Window actions on hover**: close, minimize, full screen, quit, shown below the icon.
 - **Dock badges**: unread counts (Mail, Messages…) on the tiles.
 - **On release of `⌥`**: switch immediately, or keep the grid open until you click or press `↩` (default, to avoid switching by mistake).

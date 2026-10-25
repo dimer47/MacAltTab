@@ -39,6 +39,7 @@ final class Switcher {
         panel.onAction = { [weak self] i, a in self?.perform(a, on: i) }
         tabsPanel.onPick = { [weak self] k in self?.pickTab(k) }
         tabsPanel.onEnter = { [weak self] in self?.hoverWork?.cancel() }
+        tabsPanel.onClose = { [weak self] k in self?.closeTab(k) }
         store.refresh()
     }
 
@@ -86,6 +87,16 @@ final class Switcher {
         if tabsShown?.2.id != list[sel].id { tabSel = nil }
         tabsShown = (w, id, list[sel])
         tabsPanel.show(w.tabs, icon: list[sel].app.icon, beside: panel.glassScreenFrame, highlight: tabSel)
+    }
+
+    private func closeTab(_ k: Int) {
+        guard let (w, _, it) = tabsShown, let tab = w.tabs.first(where: { $0.index == k }) else { return }
+        tabSel = nil
+        Tabs.close(tab, in: w, app: it.app) { [weak self] in
+            guard let self, self.active else { return }
+            self.store.refresh { self.reload() }
+            self.updateTabs()
+        }
     }
 
     private func moveTab(_ d: Int) {
@@ -163,6 +174,8 @@ final class Switcher {
         case kVK_RightArrow: move(1)
         case kVK_UpArrow, kVK_DownArrow:
             if let t = panel.neighbor(of: sel, down: Int(e.keyCode) == kVK_DownArrow) { setSel(t) }
+        case kVK_Delete where e.modifierFlags.contains(.shift):
+            if let k = tabSel { closeTab(k) }
         case kVK_Delete:
             guard !query.isEmpty else { return }
             query.removeLast()
