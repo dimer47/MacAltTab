@@ -15,7 +15,7 @@ struct TabWindow {
 
 /// Onglets de Chrome, Safari et Terminal, lus par AppleScript (autorisation « Automatisation »).
 enum Tabs {
-    static let supported: Set<String> = ["com.google.Chrome", "com.apple.Safari", "com.apple.Terminal"]
+    static let supported: Set<String> = ["com.google.Chrome", "com.apple.Safari"]
     private static let q = DispatchQueue(label: "tabs", qos: .userInitiated)
     private static var cache: [String: [TabWindow]] = [:] // accès sur le fil principal
 

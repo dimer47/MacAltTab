@@ -67,7 +67,7 @@ final class Switcher {
     /// Si une fenêtre a des onglets, garder la place à droite pour leur liste.
     /// La valeur reste d'une ouverture à l'autre : la grille ne saute pas.
     private func tabsLoaded() {
-        let need: CGFloat = list.contains { Tabs.of($0) != nil } ? TabsPanel.width + 10 : 0
+        let need: CGFloat = list.contains { tabsOf($0) != nil } ? TabsPanel.width + 10 : 0
         if need != panel.reserveRight {
             panel.reserveRight = need
             applyFilter()
@@ -78,7 +78,7 @@ final class Switcher {
 
     /// Affiche les onglets de la fenêtre sélectionnée, s'il y en a plusieurs.
     private func updateTabs() {
-        guard active, panel.isVisible, list.indices.contains(sel), let (w, id) = Tabs.of(list[sel]) else {
+        guard active, panel.isVisible, list.indices.contains(sel), let (w, id) = tabsOf(list[sel]) else {
             tabsPanel.hide()
             tabsShown = nil
             tabSel = nil
@@ -90,13 +90,38 @@ final class Switcher {
     }
 
     private func closeTab(_ k: Int) {
-        guard let (w, _, it) = tabsShown, let tab = w.tabs.first(where: { $0.index == k }) else { return }
+        guard let (w, id, it) = tabsShown, let tab = w.tabs.first(where: { $0.index == k }) else { return }
         tabSel = nil
+        if id == "native" {
+            WindowActions.close(it.tabs[k - 1])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                self?.store.refresh { self?.reload() }
+            }
+            return
+        }
         Tabs.close(tab, in: w, app: it.app) { [weak self] in
             guard let self, self.active else { return }
             self.store.refresh { self.reload() }
             self.updateTabs()
         }
+    }
+
+    /// Onglets d'une fenêtre : ceux du navigateur, ou les onglets natifs (Terminal, Finder).
+    private func tabsOf(_ it: WinItem) -> (TabWindow, String)? {
+        if it.tabs.count > 1 {
+            let tabs = it.tabs.enumerated().map { i, t in
+                BrowserTab(title: Self.shortTitle(t.title), detail: "", active: t.wid == it.wid, index: i + 1)
+            }
+            return (TabWindow(scriptID: "", frame: it.frame, tabs: tabs), "native")
+        }
+        return Tabs.of(it)
+    }
+
+    /// « iachi — -zsh — 202×38 » → « iachi — -zsh » : la taille n'aide pas à choisir.
+    private static func shortTitle(_ t: String) -> String {
+        var parts = t.components(separatedBy: " — ")
+        if parts.count > 1, parts.last?.range(of: #"^\d+×\d+$"#, options: .regularExpression) != nil { parts.removeLast() }
+        return parts.joined(separator: " — ")
     }
 
     private func moveTab(_ d: Int) {
@@ -110,6 +135,12 @@ final class Switcher {
     private func pickTab(_ k: Int) {
         guard let (w, id, it) = tabsShown, let tab = w.tabs.first(where: { $0.index == k }) else { return }
         close()
+        if id == "native" {
+            let t = it.tabs[k - 1]
+            WindowActions.focus(t)
+            if let wid = t.wid { store.noteFocus(wid: wid) }
+            return
+        }
         Tabs.select(tab, in: w, app: id)
         WindowActions.focus(it)
         if let wid = it.wid { store.noteFocus(wid: wid) }

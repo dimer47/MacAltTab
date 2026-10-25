@@ -8,6 +8,8 @@ struct WinItem {
     let minimized: Bool
     let otherSpace: Bool
     var frame: CGRect = .zero // coordonnées écran, origine en haut à gauche
+    /// Onglets natifs de macOS (Terminal, Finder) : une fenêtre par onglet, superposées.
+    var tabs: [WinItem] = []
     var badge: String?
 
     var id: String { wid.map { "w\($0)" } ?? "a\(app.processIdentifier)" }
@@ -116,7 +118,8 @@ final class WindowStore {
         // 3. Fenêtres retenues : vraies fenêtres (standard ou dialogue).
         var windows: [(WinItem, Int)] = []
         var onScreenTabs = Set<Int>()
-        var tabGroups: [String: Int] = [:] // onglets natifs (Terminal, Finder) : une seule tuile par fenêtre
+        var tabGroups: [String: Int] = [:]
+        var groupMembers: [String: [WinItem]] = [:] // onglets natifs (Terminal, Finder) : une seule tuile par fenêtre
         var appsWithWindows = Set<pid_t>()
         let mruIndex = Dictionary(mru.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         for (z, w) in cg.enumerated() {
@@ -132,10 +135,11 @@ final class WindowStore {
             item.frame = CGRect(origin: pos, size: size)
             // Les onglets natifs de macOS sont des fenêtres superposées : n'en garder qu'une,
             // celle affichée, ou à défaut la plus récente. Chrome et Safari ont leurs propres onglets.
-            if !minimized, let bid = app.bundleIdentifier, bid != "com.google.Chrome", bid != "com.apple.Safari",
-               Self.hasTabBar(ax) {
+            // Deux fenêtres d'une même app exactement superposées = deux onglets.
+            if !minimized, let bid = app.bundleIdentifier, bid != "com.google.Chrome", bid != "com.apple.Safari" {
                 let key = "\(w.pid)|\(Int(pos.x)),\(Int(pos.y)),\(Int(size.width)),\(Int(size.height))"
                 let rank = mruIndex[w.wid] ?? 10_000 + z
+                groupMembers[key, default: []].append(item)
                 if let j = tabGroups[key] {
                     let oldOn = onScreenTabs.contains(j)
                     if (w.onScreen && !oldOn) || (w.onScreen == oldOn && rank < windows[j].1) {
@@ -150,6 +154,10 @@ final class WindowStore {
             windows.append((item, mruIndex[w.wid] ?? 10_000 + z))
             appsWithWindows.insert(w.pid)
         }
+        for (key, j) in tabGroups {
+            let members = groupMembers[key] ?? []
+            if members.count > 1 { windows[j].0.tabs = members.sorted { ($0.wid ?? 0) < ($1.wid ?? 0) } }
+        }
         var out = windows.sorted { $0.1 < $1.1 }.map(\.0)
 
         // 4. Apps ouvertes sans fenêtre, à la fin.
@@ -163,11 +171,6 @@ final class WindowStore {
             if let path = out[i].app.bundleURL?.standardizedFileURL.path { out[i].badge = badges[path] }
         }
         return out
-    }
-
-    private static func hasTabBar(_ ax: AXUIElement) -> Bool {
-        let kids: [AXUIElement] = ax.attr(kAXChildrenAttribute) ?? []
-        return kids.contains { ($0.attr(kAXRoleAttribute) as String?) == kAXTabGroupRole }
     }
 
     /// Les fenêtres des autres bureaux n'apparaissent pas dans kAXWindows :
